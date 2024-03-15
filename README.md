@@ -43,8 +43,8 @@ The surface is unmapped, so according to the protocol documentation:
 Therefore, showing is done by:
 
 * committing the surface **without a buffer**
-* waiting for `configure`
-* attaching the buffer after (well, _in_) the initial `configure`
+* waiting for `xdg_surface_configure`
+* attaching the buffer after (well, _in_) the initial `xdg_surface_configure`
 
 The surface should now be mapped and show up on screen again.
 
@@ -60,7 +60,7 @@ https://github.com/czak/showhide/assets/14021/598f285b-098d-45dd-87b7-00d6ac4df2
 
 Recorded in `commit f4c69abc577f36e33da2f2bfe81c51efcac2ff01 (HEAD -> main)`
 
-Result: first `commit` after unmapping doesn't trigger `configure`.
+Result: first `commit` after unmapping doesn't trigger `xdg_surface_configure`.
 
 https://github.com/czak/showhide/assets/14021/e0289a3c-00a8-4992-89d2-fc16c1bdc5fc
 

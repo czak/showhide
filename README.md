@@ -2,7 +2,7 @@ Example Wayland clients to test surface unmapping/remapping behavior.
 
 # How to test
 
-```
+```shell
 $ make
 $ WAYLAND_DEBUG=1 ./xdg_shell
 
@@ -47,3 +47,18 @@ Therefore, showing is done by:
 * attaching the buffer after (well, _in_) the initial `configure`
 
 The surface should now be mapped and show up on screen again.
+
+# Demo
+
+Recorded in `sway version 1.10-dev-dc9f2173 (Mar 15 2024, branch 'master')`:
+
+https://github.com/czak/showhide/assets/14021/598f285b-098d-45dd-87b7-00d6ac4df2f6
+
+# Observed results
+
+* Sway
+    * works as described above (see demo)
+    * tested on `1.10-dev-dc9f2173 (Mar 15 2024, branch 'master')`
+* Weston
+    * `commit` after unmapping doesn't trigger `configure`
+    * tested on `commit f4c69abc577f36e33da2f2bfe81c51efcac2ff01 (HEAD -> main)`

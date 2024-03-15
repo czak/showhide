@@ -1,32 +1,27 @@
+#define _GNU_SOURCE
 #include <assert.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <wayland-client.h>
 
-#include "protocols/viewporter.h"
-#include "protocols/single-pixel-buffer-v1.h"
 #include "protocols/wlr-layer-shell-unstable-v1.h"
 
 static struct wl_display *wl_display;
 static struct wl_registry *wl_registry;
 static struct wl_compositor *wl_compositor;
-static struct wp_viewporter *wp_viewporter;
+static struct wl_shm *wl_shm;
 static struct zwlr_layer_shell_v1 *zwlr_layer_shell_v1;
-static struct wp_single_pixel_buffer_manager_v1 *wp_single_pixel_buffer_manager_v1;
 
 static struct wl_surface *wl_surface;
 static struct zwlr_layer_surface_v1 *zwlr_layer_surface_v1;
-static struct wp_viewport *wp_viewport;
-static struct wl_buffer *wl_buffer;
+
+const int width = 200;
+const int height = 200;
 
 static int visible = 1;
-
-const uint32_t default_width = 200;
-const uint32_t default_height = 200;
-
-static void noop() {}
 
 static void registry_global(void *data, struct wl_registry *registry,
 		uint32_t name, const char *interface, uint32_t version)
@@ -36,26 +31,52 @@ static void registry_global(void *data, struct wl_registry *registry,
 				wl_registry_bind(registry, name, &wl_compositor_interface, 4);
 	}
 
-	else if (strcmp(interface, wp_viewporter_interface.name) == 0) {
-		wp_viewporter =
-				wl_registry_bind(registry, name, &wp_viewporter_interface, 1);
+	if (strcmp(interface, wl_shm_interface.name) == 0) {
+		wl_shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
 	}
 
 	else if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
 		zwlr_layer_shell_v1 =
 				wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 4);
 	}
+}
 
-	else if (strcmp(interface, wp_single_pixel_buffer_manager_v1_interface.name) == 0) {
-		wp_single_pixel_buffer_manager_v1 =
-				wl_registry_bind(registry, name, &wp_single_pixel_buffer_manager_v1_interface, 1);
-	}
+static void registry_global_remove() {
+	/* No op */
 }
 
 static const struct wl_registry_listener registry_listener = {
 	.global = registry_global,
-	.global_remove = noop,
+	.global_remove = registry_global_remove,
 };
+
+struct wl_buffer *draw_frame()
+{
+	static struct wl_buffer *wl_buffer;
+
+	if (wl_buffer != NULL) {
+		return wl_buffer;
+	}
+
+	int stride = width * sizeof(uint32_t);
+	int size = stride * height;
+
+	int fd = memfd_create("buffer-pool", 0);
+	ftruncate(fd, size);
+
+	struct wl_shm_pool *wl_shm_pool = wl_shm_create_pool(wl_shm, fd, size);
+	wl_buffer = wl_shm_pool_create_buffer(
+			wl_shm_pool, 0, width, height, stride, WL_SHM_FORMAT_XRGB8888);
+
+	// Fill with white
+	uint32_t *pixels = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	memset(pixels, 0xff, size);
+
+	wl_shm_pool_destroy(wl_shm_pool);
+	close(fd);
+
+	return wl_buffer;
+}
 
 static void zwlr_layer_surface_v1_configure(void *data,
 		struct zwlr_layer_surface_v1 *zwlr_layer_surface_v1, uint32_t serial,
@@ -63,20 +84,22 @@ static void zwlr_layer_surface_v1_configure(void *data,
 {
 	zwlr_layer_surface_v1_ack_configure(zwlr_layer_surface_v1, serial);
 
-	width = width > 0 ? width : default_width;
-	height = height > 0 ? height : default_height;
-
 	if (visible) {
+		struct wl_buffer *wl_buffer = draw_frame();
 		wl_surface_attach(wl_surface, wl_buffer, 0, 0);
-		wp_viewport_set_destination(wp_viewport, width, width);
+		wl_surface_damage_buffer(wl_surface, 0, 0, INT32_MAX, INT32_MAX);
 	}
 
 	wl_surface_commit(wl_surface);
 }
 
+static void zwlr_layer_surface_v1_closed() {
+	/* No op */
+}
+
 static const struct zwlr_layer_surface_v1_listener zwlr_layer_surface_v1_listener = {
 	.configure = zwlr_layer_surface_v1_configure,
-	.closed = noop,
+	.closed = zwlr_layer_surface_v1_closed,
 };
 
 static void toggle(int signum)
@@ -93,10 +116,10 @@ static void toggle(int signum)
 		visible = 1;
 
 		/*
-		 * Assume layer is unmapped, and we can't attach a buffer
+		 * The layer is unmapped, and we can't attach a buffer
 		 * until it is first configured.
 		 *
-		 * Commit without a buffer and attach buffer in ack_configure.
+		 * Commit without a buffer and wait for first configure.
 		 */
 		wl_surface_commit(wl_surface);
 	}
@@ -111,27 +134,18 @@ int main(void)
 	wl_registry_add_listener(wl_registry, &registry_listener, NULL);
 	wl_display_roundtrip(wl_display);
 
-	assert(wl_compositor && wp_viewporter && zwlr_layer_shell_v1);
+	assert(wl_compositor && wl_shm && zwlr_layer_shell_v1);
 
 	wl_surface = wl_compositor_create_surface(wl_compositor);
-	wp_viewport = wp_viewporter_get_viewport(wp_viewporter, wl_surface);
 	zwlr_layer_surface_v1 = zwlr_layer_shell_v1_get_layer_surface(
 			zwlr_layer_shell_v1, wl_surface, NULL,
 			ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "layers");
 
-	assert(wl_surface && wp_viewport && zwlr_layer_surface_v1);
-
-	wl_buffer = wp_single_pixel_buffer_manager_v1_create_u32_rgba_buffer(
-			wp_single_pixel_buffer_manager_v1,
-			UINT32_MAX * 0.3,
-			0,
-			0,
-			UINT32_MAX * 0.3);
+	assert(wl_surface && zwlr_layer_surface_v1);
 
 	zwlr_layer_surface_v1_add_listener(zwlr_layer_surface_v1,
 			&zwlr_layer_surface_v1_listener, NULL);
-	zwlr_layer_surface_v1_set_size(zwlr_layer_surface_v1,
-			default_width, default_height);
+	zwlr_layer_surface_v1_set_size(zwlr_layer_surface_v1, width, height);
 	wl_surface_commit(wl_surface);
 
 	// pkill -USR1 layer_shell to toggle the surface visibility

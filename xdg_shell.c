@@ -18,7 +18,6 @@ static struct xdg_wm_base *xdg_wm_base;
 static struct wl_surface *wl_surface;
 static struct xdg_surface *xdg_surface;
 static struct xdg_toplevel *xdg_toplevel;
-static struct wl_buffer *wl_buffer;
 
 const int width = 200;
 const int height = 200;
@@ -51,10 +50,12 @@ static const struct wl_registry_listener registry_listener = {
 	.global_remove = registry_global_remove,
 };
 
-static void init_buffer()
+static struct wl_buffer *draw_frame()
 {
+	static struct wl_buffer *wl_buffer;
+
 	if (wl_buffer != NULL) {
-		return;
+		return wl_buffer;
 	}
 
 	int stride = width * sizeof(uint32_t);
@@ -66,13 +67,15 @@ static void init_buffer()
 	struct wl_shm_pool *wl_shm_pool = wl_shm_create_pool(wl_shm, fd, size);
 	wl_buffer = wl_shm_pool_create_buffer(
 			wl_shm_pool, 0, width, height, stride, WL_SHM_FORMAT_XRGB8888);
-	uint32_t *pixels = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
-	// Fill with gray
-	memset(pixels, 0x7f, size);
+	// Fill with white
+	uint32_t *pixels = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	memset(pixels, 0xff, size);
 
 	wl_shm_pool_destroy(wl_shm_pool);
 	close(fd);
+
+	return wl_buffer;
 }
 
 static void xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
@@ -81,8 +84,9 @@ static void xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
 	xdg_surface_ack_configure(xdg_surface, serial);
 
 	if (visible) {
-		init_buffer();
+		struct wl_buffer *wl_buffer = draw_frame();
 		wl_surface_attach(wl_surface, wl_buffer, 0, 0);
+		wl_surface_damage_buffer(wl_surface, 0, 0, INT32_MAX, INT32_MAX);
 	}
 
 	wl_surface_commit(wl_surface);
@@ -106,10 +110,10 @@ static void toggle(int signum)
 		visible = 1;
 
 		/*
-		 * Assume layer is unmapped, and we can't attach a buffer
+		 * The layer is unmapped, and we can't attach a buffer
 		 * until it is first configured.
 		 *
-		 * Commit without a buffer and attach buffer in configure.
+		 * Commit without a buffer and wait for first configure.
 		 */
 		wl_surface_commit(wl_surface);
 	}

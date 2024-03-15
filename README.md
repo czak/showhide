@@ -48,17 +48,22 @@ Therefore, showing is done by:
 
 The surface should now be mapped and show up on screen again.
 
-# Demo
+# Demo: `sway`
 
-Recorded in `sway version 1.10-dev-dc9f2173 (Mar 15 2024, branch 'master')`:
+Recorded in `sway version 1.10-dev-dc9f2173 (Mar 15 2024, branch 'master')`.
+
+Result: behaves as described above
 
 https://github.com/czak/showhide/assets/14021/598f285b-098d-45dd-87b7-00d6ac4df2f6
 
-# Observed results
+# Demo: `weston`
 
-* Sway
-    * works as described above (see demo)
-    * tested on `1.10-dev-dc9f2173 (Mar 15 2024, branch 'master')`
-* Weston
-    * `commit` after unmapping doesn't trigger `configure`
-    * tested on `commit f4c69abc577f36e33da2f2bfe81c51efcac2ff01 (HEAD -> main)`
+Recorded in `commit f4c69abc577f36e33da2f2bfe81c51efcac2ff01 (HEAD -> main)`
+
+Result: first `commit` after unmapping doesn't trigger `configure`.
+
+https://github.com/czak/showhide/assets/14021/e0289a3c-00a8-4992-89d2-fc16c1bdc5fc
+
+
+
+

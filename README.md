@@ -1,5 +1,8 @@
 Example Wayland clients to test surface unmapping/remapping behavior.
 
+Reference:
+* https://gitlab.freedesktop.org/wayland/weston/-/issues/893
+
 # How to test
 
 ```shell
